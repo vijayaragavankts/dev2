@@ -19,12 +19,9 @@ public class TransactionDto {
     private String invoice_status;
 
     // Card Details (only used if paymentMethod is "CARD")
-    private String cardNumber;
-    private String cardHolderName;
-    private String cardExpiryDate;
-    private String cvv;
-    private String cardType;  // credit, debit
+    private long cardId;
 
     // Wallet Details (only used if paymentMethod is "WALLET")
     private double walletBalance;   // Optional field to track wallet balance if needed
+
 }

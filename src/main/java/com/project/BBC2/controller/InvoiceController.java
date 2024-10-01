@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/invoices")
@@ -22,4 +23,13 @@ public class InvoiceController {
         return ResponseEntity.ok(invoices);
     }
 
+    @GetMapping("/invoice/{invoiceId}")
+    public ResponseEntity<Invoice> getInvoiceByInvoiceId(@PathVariable Long invoiceId) {
+        Optional<Invoice> invoice = invoiceService.getInvoiceByInvoiceId(invoiceId);
+        if (invoice.isPresent()) {
+            return ResponseEntity.ok(invoice.get());
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
 }

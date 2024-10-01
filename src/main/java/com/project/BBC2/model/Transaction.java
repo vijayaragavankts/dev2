@@ -42,11 +42,6 @@ public class Transaction {
 
     private Boolean isEarly;
 
-    @OneToOne
-    @JoinColumn(name = "card_details_id")
-    private CardDetails cardDetails;  // Add CardDetails association
 
-    @ManyToOne
-    @JoinColumn(name = "wallet_details_id")
-    private WalletDetails walletDetails;  // Add WalletDetails association
+    private Long methodId;
 }

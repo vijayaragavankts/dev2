@@ -128,17 +128,14 @@ public class TransactionService {
         try {
             if (transactionDto.getPaymentMethod().equalsIgnoreCase("CARD")) {
                 validateCardDetails(transactionDto);
-                CardDetails cardDetails = new CardDetails();
-                cardDetails.setCustomer(transaction.getCustomer());
-                cardDetails.setCardNumber(transactionDto.getCardNumber());
-                cardDetails.setCardHolderName(transactionDto.getCardHolderName());
-                cardDetails.setExpiryDate(transactionDto.getCardExpiryDate());
-                cardDetails.setCvv(transactionDto.getCvv());
-                cardDetails.setCardType(transactionDto.getCardType());
-                cardDetailsRepo.save(cardDetails);
+                // find cardDetails by its cardId
+                CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId())
+                        .orElseThrow(()->new InvalidTransactionException("Card Detail not found"));
 
-                transaction.setCardDetails(cardDetails);
-            } else if (transactionDto.getPaymentMethod().equalsIgnoreCase("WALLET")) {
+
+                transaction.setMethodId(cardDetails.getId());
+            }
+            else if (transactionDto.getPaymentMethod().equalsIgnoreCase("WALLET")) {
                 WalletDetails walletDetails = walletDetailsRepo.findByCustomer(transaction.getCustomer())
                         .orElseThrow(() -> new InvalidTransactionException("Wallet not found for the customer."));
 
@@ -148,7 +145,7 @@ public class TransactionService {
                 }
                 walletDetails.debit(transactionDto.getAmount()); // Deduct from wallet
                 walletDetailsRepo.save(walletDetails);
-                transaction.setWalletDetails(walletDetails);
+                transaction.setMethodId(walletDetails.getId());
             }
             transaction.setAmount(transactionAmount);
             transaction.setStatus("SUCCESS"); // Assume successful for partial payment
@@ -226,16 +223,12 @@ public class TransactionService {
     private void handleCardPayment(TransactionDto transactionDto, Transaction transaction, Invoice invoice,BigDecimal discountAmount) {
         validateCardDetails(transactionDto);
 
-        CardDetails cardDetails = new CardDetails();
-        cardDetails.setCustomer(transaction.getCustomer());
-        cardDetails.setCardNumber(transactionDto.getCardNumber());
-        cardDetails.setCardHolderName(transactionDto.getCardHolderName());
-        cardDetails.setExpiryDate(transactionDto.getCardExpiryDate());
-        cardDetails.setCvv(transactionDto.getCvv());
-        cardDetails.setCardType(transactionDto.getCardType());
-        cardDetailsRepo.save(cardDetails);
+        CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId())
+                .orElseThrow(()->new InvalidTransactionException("Card Detail not found"));
 
-        transaction.setCardDetails(cardDetails);  // Associate the card details
+
+
+        transaction.setMethodId(cardDetails.getId());  // Associate the card details
 
         transaction.setAmount(discountAmount);
 
@@ -266,7 +259,7 @@ public class TransactionService {
 
         walletDetails.debit(transactionDto.getAmount()); // Deduct from wallet
         walletDetailsRepo.save(walletDetails);
-        transaction.setWalletDetails(walletDetails);  // Associate the wallet details
+        transaction.setMethodId(walletDetails.getId());  // Associate the wallet details
         transaction.setStatus("SUCCESS");
         transaction.setAmount(discountAmount);
         invoice.setAmount(invoice.getAmount().subtract(discountAmount));
@@ -286,13 +279,14 @@ public class TransactionService {
     }
 
     private void validateCardDetails(TransactionDto transactionDto) {
-        if (transactionDto.getCardNumber() == null || transactionDto.getCardNumber().length() != 16) {
+        CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId()).get();
+        if (cardDetails.getCardNumber() == null || cardDetails.getCardNumber().length() != 16) {
             throw new InvalidTransactionException("Card number must be 16 digits.");
         }
-        if (transactionDto.getCvv() == null || transactionDto.getCvv().length() != 3) {
+        if (cardDetails.getCvv() == null || cardDetails.getCvv().length() != 3) {
             throw new InvalidTransactionException("CVV must be 3 digits.");
         }
-        if (!isExpiryDateValid(transactionDto.getCardExpiryDate())) {
+        if (!isExpiryDateValid(cardDetails.getExpiryDate())) {
             throw new InvalidTransactionException("Card expiry date must be in the future.");
         }
     }
