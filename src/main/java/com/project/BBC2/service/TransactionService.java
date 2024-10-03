@@ -1,5 +1,6 @@
 package com.project.BBC2.service;
 
+import com.project.BBC2.controller.ApiResponse;
 import com.project.BBC2.dto.TransactionDto;
 import com.project.BBC2.exception.CustomerNotFoundException;
 import com.project.BBC2.exception.InvalidTransactionException;
@@ -11,6 +12,8 @@ import com.project.BBC2.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -39,257 +42,359 @@ public class TransactionService {
     @Autowired
     private WalletDetailsRepo walletDetailsRepo;
 
-    public Transaction createTransaction(TransactionDto transactionDto) {
-        validateTransactionDto(transactionDto);
+    String curr = "";
 
-        Customer customer = customerRepo.findByCustomerId(transactionDto.getCustomerId())
-                .orElseThrow(()->new CustomerNotFoundException(transactionDto.getCustomerId()));
-        if (customer == null) {
-            throw new CustomerNotFoundException(transactionDto.getCustomerId());
-        }
+    public ResponseEntity<?> createTransaction(TransactionDto transactionDto) {
+        try {
+            validateTransactionDto(transactionDto);
 
-        Invoice invoice = invoiceRepo.findById(transactionDto.getInvoiceId())
-                .orElseThrow(() -> new InvoiceNotFoundException(transactionDto.getInvoiceId()));
+            Customer customer = customerRepo.findByCustomerId(transactionDto.getCustomerId()).orElse(null);
 
-        if (invoice.getStatus() == InvoiceStatus.PAID) {
-            throw new InvalidTransactionException("The invoice has already been fully paid. No further transactions are allowed.");
-        }
-
-        if (!invoice.getCustomer().getCustomerId().equals(transactionDto.getCustomerId())) {
-            throw new InvalidTransactionException("The customer does not have permission to pay this invoice.");
-        }
-
-        Transaction transaction = new Transaction();
-        transaction.setCustomer(customer);
-        transaction.setInvoice(invoice);
-        transaction.setIsEarly(transactionDto.getIsEarly());
-        transaction.setPaymentMethod(transactionDto.getPaymentMethod());
-
-        BigDecimal transactionAmount = transactionDto.getAmount();
-        boolean isEarly = transactionDto.getIsEarly();
-
-        BigDecimal discountAmount = BigDecimal.ZERO;
-
-        if (invoice.getStatus() != InvoiceStatus.PARTIALLY &&
-                (transactionDto.getPaymentMethod().equalsIgnoreCase("CARD")
-                        || (transactionDto.getPaymentMethod().equalsIgnoreCase("WALLET"))) ){
-
-
-            // Apply discount logic
-            if (isEarly) {
-                // Apply double discount for early payments
-                discountAmount = invoice.getDouble_discount_amount();
-            } else {
-                // Apply single discount for late payments
-                discountAmount = invoice.getSingle_discount_amount();
+            if (customer == null) {
+                return ResponseEntity.ok(new ApiResponse(false, "Customer not found with ID: " + transactionDto.getCustomerId()));
             }
 
-        } else if(invoice.getStatus() != InvoiceStatus.PARTIALLY && transactionDto.getPaymentMethod().equalsIgnoreCase("CASH")){
-            if(isEarly){
-                discountAmount = invoice.getSingle_discount_amount();
+            Invoice invoice = invoiceRepo.findById(transactionDto.getInvoiceId())
+                    .orElseThrow(() -> new InvoiceNotFoundException(transactionDto.getInvoiceId()));
+
+            if (invoice.getStatus() == InvoiceStatus.PAID) {
+                return ResponseEntity.ok(new ApiResponse(false, "The invoice has already been fully paid. No further transactions are allowed."));
             }
-            else{
+
+            if (!invoice.getCustomer().getCustomerId().equals(transactionDto.getCustomerId())) {
+                return ResponseEntity.ok(new ApiResponse(false,"The customer does not have permission to pay this invoice."));
+            }
+
+            Transaction transaction = new Transaction();
+            transaction.setCustomer(customer);
+            transaction.setInvoice(invoice);
+            transaction.setIsEarly(transactionDto.getIsEarly());
+            transaction.setPaymentMethod(transactionDto.getPaymentMethod());
+
+            BigDecimal transactionAmount = transactionDto.getAmount();
+            boolean isEarly = transactionDto.getIsEarly();
+
+            BigDecimal discountAmount = BigDecimal.ZERO;
+
+            if (invoice.getStatus() != InvoiceStatus.PARTIALLY &&
+                    (transactionDto.getPaymentMethod().equalsIgnoreCase("CARD")
+                            || (transactionDto.getPaymentMethod().equalsIgnoreCase("WALLET")))) {
+
+
+                // Apply discount logic
+                if (isEarly) {
+                    // Apply double discount for early payments
+                    discountAmount = invoice.getDouble_discount_amount();
+                } else {
+                    // Apply single discount for late payments
+                    discountAmount = invoice.getSingle_discount_amount();
+                }
+
+            } else if (invoice.getStatus() != InvoiceStatus.PARTIALLY && transactionDto.getPaymentMethod().equalsIgnoreCase("CASH")) {
+                if (isEarly) {
+                    discountAmount = invoice.getSingle_discount_amount();
+                } else {
+                    discountAmount = invoice.getAmount();
+                }
+                // For non-card payments, use the original transaction amount
+            } else if (invoice.getStatus() == InvoiceStatus.PARTIALLY) {
                 discountAmount = invoice.getAmount();
             }
-            // For non-card payments, use the original transaction amount
+
+
+            // Process the transaction based on the payment amount
+            if (transactionAmount.compareTo(discountAmount) < 0) {
+                return handlePartialPayment(invoice, transaction, transactionDto, transactionAmount);
+            } else {
+                return handleFullPayment(invoice, transactionDto, transaction, transactionAmount, isEarly, discountAmount);
+            }
+        } catch (CustomerNotFoundException | InvoiceNotFoundException | InvalidTransactionException e) {
+            // Handle known exceptions and return appropriate error responses
+            logger.error("Transaction creation failed: {}", e.getMessage());
+            return ResponseEntity.ok(new ApiResponse(false,e.getMessage()));
+
+        } catch (Exception e) {
+            // Handle any unexpected exceptions
+            logger.error("Unexpected error during transaction creation: {}", e.getMessage());
+            return ResponseEntity.ok(new ApiResponse(false,"An unexpected error occurred."));
         }
-        else if(invoice.getStatus() == InvoiceStatus.PARTIALLY){
-            discountAmount = invoice.getAmount();
-        }
-
-
-        // Process the transaction based on the payment amount
-        if (transactionAmount.compareTo(discountAmount) < 0) {
-            try{
-                handlePartialPayment(invoice, transaction, transactionDto, transactionAmount);
-            }
-            catch (Exception e) {
-                transaction.setStatus("FAILED");
-                transaction.setInvoice_status("FAILED");
-                logger.error("Partial payment transaction failed: {}", e.getMessage());
-            }
-
-        } else {
-            try{
-                handleFullPayment(invoice, transactionDto, transaction, transactionAmount, isEarly,discountAmount);
-            }
-            catch (Exception e) {
-                transaction.setStatus("FAILED");
-                transaction.setInvoice_status("FAILED");
-                logger.error("transaction failed: {}", e.getMessage());
-            }
-
-        }
-
-        return transactionRepo.save(transaction);
     }
 
-    private void handlePartialPayment(Invoice invoice, Transaction transaction, TransactionDto transactionDto, BigDecimal transactionAmount) {
+    private ResponseEntity<?> handlePartialPayment(Invoice invoice, Transaction transaction, TransactionDto transactionDto, BigDecimal transactionAmount) {
         try {
-            if (transactionDto.getPaymentMethod().equalsIgnoreCase("CARD")) {
+            curr = "partial";
+
                 validateCardDetails(transactionDto);
                 // find cardDetails by its cardId
                 CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId())
-                        .orElseThrow(()->new InvalidTransactionException("Card Detail not found"));
+                        .orElse(null);
 
+                if (cardDetails == null) {
+                    return ResponseEntity.ok(new ApiResponse(false, "Card Detail not found."));
+                }
 
                 transaction.setMethodId(cardDetails.getId());
-            }
-            else if (transactionDto.getPaymentMethod().equalsIgnoreCase("WALLET")) {
-                WalletDetails walletDetails = walletDetailsRepo.findByCustomer(transaction.getCustomer())
-                        .orElseThrow(() -> new InvalidTransactionException("Wallet not found for the customer."));
-
-                BigDecimal walletBalance = walletDetails.getBalance();
-                if (walletBalance.compareTo(transactionAmount) < 0) {
-                    throw new InvalidTransactionException("Insufficient wallet balance.");
+                ResponseEntity<ApiResponse> paymentResponse = processPayment(transactionDto, transaction, invoice, transactionAmount, curr);
+                if (!paymentResponse.getBody().isSuccess()) {
+                    return paymentResponse;
                 }
-                walletDetails.debit(transactionDto.getAmount()); // Deduct from wallet
-                walletDetailsRepo.save(walletDetails);
-                transaction.setMethodId(walletDetails.getId());
-            }
-            transaction.setAmount(transactionAmount);
-            transaction.setStatus("SUCCESS"); // Assume successful for partial payment
-            transaction.setInvoice_status("PARTIAL");
-            invoice.setAmount(invoice.getAmount().subtract(transactionAmount));
-            invoice.setStatus(InvoiceStatus.PARTIALLY); // Update invoice status
-            invoice.setDouble_discount_amount(BigDecimal.valueOf(0));
-            invoice.setSingle_discount_amount(BigDecimal.valueOf(0));
-            invoiceRepo.save(invoice);
 
+                Transaction savedTransaction = transactionRepo.save(transaction);
+            return ResponseEntity.ok(new ApiResponse(true, "Transaction processed successfully for partial payment."));
         } catch (Exception e) {
             transaction.setStatus("FAILED");
             transaction.setInvoice_status("FAILED");
             logger.error("Partial payment transaction failed: {}", e.getMessage());
+            return ResponseEntity.ok("Failed to process partial payment: " + e.getMessage());
         }
     }
 
 
-    private void handleFullPayment(Invoice invoice, TransactionDto transactionDto, Transaction transaction,
-                                   BigDecimal transactionAmount, boolean isEarly,BigDecimal discountAmount) {
-        validateFullPayment(invoice, transactionDto, transaction, transactionAmount, isEarly ,discountAmount);
-
+    private ResponseEntity<?> handleFullPayment(Invoice invoice, TransactionDto transactionDto, Transaction transaction,
+                                                BigDecimal transactionAmount, boolean isEarly, BigDecimal discountAmount) {
         try {
-            processPayment(transactionDto, transaction, invoice,discountAmount);
+            curr = "full";
+            // Call the validation method and get the response
+            ResponseEntity<ApiResponse> validationResponse = validateFullPayment(invoice, transactionDto, transaction,
+                    transactionAmount, isEarly, discountAmount);
+
+            // If validation fails, return the error response
+            if (!validationResponse.getBody().isSuccess()) {
+                return validationResponse;
+            }
+
+            ResponseEntity<ApiResponse> paymentResponse = processPayment(transactionDto, transaction, invoice, discountAmount,curr);
+
+            // If payment fails, return the error response
+            if (!paymentResponse.getBody().isSuccess()) {
+                return paymentResponse;
+            }
+
+            Transaction savedTransaction = transactionRepo.save(transaction);
+            return ResponseEntity.ok(new ApiResponse(true, "Transaction saved successfully"));
+
         } catch (Exception e) {
-            transaction.setStatus("FAILED");
-            transaction.setInvoice_status("FAILED");
             logger.error("Transaction failed: {}", e.getMessage());
+            return ResponseEntity.ok(new ApiResponse(false, "Failed to process full payment: " + e.getMessage()));
         }
     }
 
-    private void validateFullPayment(Invoice invoice, TransactionDto transactionDto, Transaction transaction,
-                                     BigDecimal transactionAmount, boolean isEarly, BigDecimal discountAmount) {
 
+    private ResponseEntity<ApiResponse> validateFullPayment(Invoice invoice, TransactionDto transactionDto,
+                                                            Transaction transaction, BigDecimal transactionAmount,
+                                                            boolean isEarly, BigDecimal discountAmount) {
         if (invoice.getStatus() == InvoiceStatus.PAID) {
-            throw new InvalidTransactionException("Invoice has already been fully paid.");
+            return ResponseEntity.ok(new ApiResponse(false, "Invoice has already been fully paid."));
         }
 
-        if(transactionAmount.compareTo(discountAmount) > 0){
+        if (transactionAmount.compareTo(discountAmount) > 0) {
             // User entered greater amount than the bill amount
-            throw new InvalidTransactionException("Payment amount exceeds the invoice amount");
+            return ResponseEntity.ok(new ApiResponse(false, "Payment amount exceeds the invoice amount."));
         }
 
-//        if (isEarly && (transaction.getPaymentMethod().equalsIgnoreCase("CARD") ||
-//                transactionDto.getPaymentMethod().equalsIgnoreCase("WALLET")) &&
-//                transactionAmount.compareTo(invoice.getDouble_discount_amount()) != 0) {
-//            throw new InvalidTransactionException("Payment amount must be equal to the invoice amount. Early payment required.");
-//        }
-        // Additional conditions as per your business rules
+        // If validation passes, return a success response
+        return ResponseEntity.ok(new ApiResponse(true, "Validation successful."));
     }
 
-    private void processPayment(TransactionDto transactionDto, Transaction transaction, Invoice invoice,BigDecimal discountAmount) {
+
+    private ResponseEntity<ApiResponse> processPayment(TransactionDto transactionDto, Transaction transaction, Invoice invoice, BigDecimal discountAmount, String curr) {
         try {
+            // Handle different payment methods and return their respective responses
             switch (transactionDto.getPaymentMethod().toUpperCase()) {
                 case "CARD":
-                    handleCardPayment(transactionDto, transaction, invoice, discountAmount);
-                    break;
+                    // Return the response from handleCardPayment
+                    return handleCardPayment(transactionDto, transaction, invoice, discountAmount,curr);
+
                 case "WALLET":
-                    handleWalletPayment(transactionDto, transaction, invoice, discountAmount);
-                    break;
+                    // Return the response from handleWalletPayment
+                    return handleWalletPayment(transactionDto, transaction, invoice, discountAmount,curr);
+
                 case "CASH":
-                    handleCashPayment(transactionDto, transaction, invoice);
-                    break;
+                    // Return the response from handleCashPayment
+                    return handleCashPayment(transactionDto, transaction, invoice);
+
                 default:
-                    throw new InvalidTransactionException("Invalid payment method.");
+                    // Return BAD_REQUEST for an invalid payment method
+                    return ResponseEntity.ok(new ApiResponse(false, "Invalid payment method."));
             }
         } catch (Exception e) {
+            // If any exception occurs, mark the transaction as failed
             transaction.setStatus("FAILED");
             transaction.setInvoice_status("FAILED");
+            transactionRepo.save(transaction);
             logger.error("Payment processing failed: {}", e.getMessage());
-            throw e;  // Rethrow to ensure consistent handling
+
+            // Return INTERNAL_SERVER_ERROR with the error message
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse(false, "Payment processing failed: " + e.getMessage()));
         }
     }
 
-    private void handleCardPayment(TransactionDto transactionDto, Transaction transaction, Invoice invoice,BigDecimal discountAmount) {
-        validateCardDetails(transactionDto);
 
-        CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId())
-                .orElseThrow(()->new InvalidTransactionException("Card Detail not found"));
+    private ResponseEntity<ApiResponse> handleCardPayment(TransactionDto transactionDto, Transaction transaction, Invoice invoice, BigDecimal discountAmount, String curr) {
+        try {
+            // Validate card details before proceeding
+            ResponseEntity<ApiResponse> validationResponse = validateCardDetails(transactionDto);
+
+            // If validation fails, return the validation response
+            if (!validationResponse.getBody().isSuccess()) {
+                return validationResponse;
+            }
+            // Retrieve card details from repository
+            CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId())
+                    .orElseThrow(() -> new InvalidTransactionException("Card Detail not found"));
+
+            // Associate the card details with the transaction
+            transaction.setMethodId(cardDetails.getId());
+
+            // Set the transaction amount to the discounted amount
+            transaction.setAmount(discountAmount);
+
+            // Simulate the card payment
+            boolean cardPaymentSuccess = simulateCardPayment(cardDetails, transaction.getAmount());
+
+            // Handle payment success
+            if (cardPaymentSuccess) {
+                transaction.setStatus("SUCCESS");
+                invoice.setAmount(invoice.getAmount().subtract(discountAmount));
+                cardDetails.debit(discountAmount);
+                if(curr.equalsIgnoreCase("full")){
+                    invoice.setStatus(InvoiceStatus.PAID);  // Mark the invoice as fully paid
+                    transaction.setInvoice_status("FULL");
+                }
+                else{
+                    invoice.setStatus(InvoiceStatus.PARTIALLY); // Update invoice status
+                    invoice.setDouble_discount_amount(BigDecimal.valueOf(0));
+                    invoice.setSingle_discount_amount(BigDecimal.valueOf(0));
+                    transaction.setInvoice_status("PARTIAL");
+                }
+                invoiceRepo.save(invoice);
+                transactionRepo.save(transaction);
+
+                // Return a successful response
+                return ResponseEntity.ok(new ApiResponse(true, "Card payment processed successfully"));
+            }
+            // Handle payment failure
+            else {
+                transaction.setStatus("FAILED");
+                transaction.setAmount(BigDecimal.valueOf(0));  // Reset transaction amount on failure
+                transaction.setInvoice_status("FAILED");
+                transactionRepo.save(transaction);
+
+                // Return a failed response
+                // For payment-related failures
+                return ResponseEntity.ok(new ApiResponse(false, "Card payment declined due to insufficient funds"));
+
+            }
+
+        } catch (InvalidTransactionException e) {
+            // Handle invalid transaction errors
+            logger.error("Card payment error: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ApiResponse(false, e.getMessage()));
+        } catch (Exception e) {
+            // Handle general exceptions
+            logger.error("Card payment processing failed: {}", e.getMessage());
+            return ResponseEntity.ok(new ApiResponse(false, "An error occurred during card payment processing"));
+        }
+    }
 
 
+    private ResponseEntity<ApiResponse> handleWalletPayment(TransactionDto transactionDto, Transaction transaction, Invoice invoice, BigDecimal discountAmount, String curr) {
+        try {
+            // Fetch wallet details
+            WalletDetails walletDetails = walletDetailsRepo.findByCustomer(transaction.getCustomer())
+                    .orElseThrow(() -> new InvalidTransactionException("Wallet not found for the customer."));
 
-        transaction.setMethodId(cardDetails.getId());  // Associate the card details
+            BigDecimal walletBalance = walletDetails.getBalance();
 
-        transaction.setAmount(discountAmount);
+            // Check if wallet has sufficient balance
+            if (walletBalance.compareTo(discountAmount) < 0) {
+                return ResponseEntity.ok(new ApiResponse(false, "Insufficient wallet balance."));
+            }
 
+            // Debit wallet and save
+            walletDetails.debit(transactionDto.getAmount());
+            walletDetailsRepo.save(walletDetails);
 
-        // Check if the invoice has been partially paid
-
-
-        boolean cardPaymentSuccess = simulateCardPayment(cardDetails, transaction.getAmount());
-        if (cardPaymentSuccess) {
+            // Associate wallet details with transaction
+            transaction.setMethodId(walletDetails.getId());
             transaction.setStatus("SUCCESS");
+            transaction.setAmount(discountAmount);
+
+            // Update invoice status and amount
             invoice.setAmount(invoice.getAmount().subtract(discountAmount));
+            if(curr.equalsIgnoreCase("full")){
+                invoice.setStatus(InvoiceStatus.PAID);
+                transaction.setInvoice_status("FULL");
+            }
+            else{
+                invoice.setStatus(InvoiceStatus.PARTIALLY);
+                transaction.setInvoice_status("PARTIAL");
+                invoice.setDouble_discount_amount(BigDecimal.valueOf(0));
+                invoice.setSingle_discount_amount(BigDecimal.valueOf(0));
+            }
+            invoiceRepo.save(invoice);
+
+            // Return success response
+            return ResponseEntity.ok(new ApiResponse(true, "Wallet payment processed successfully."));
+
+        } catch (InvalidTransactionException e) {
+            logger.error("Wallet payment failed: {}", e.getMessage());
+            // Handle invalid transaction (e.g., wallet not found or insufficient balance)
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ApiResponse(false, e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Wallet payment processing failed: {}", e.getMessage());
+            // Handle any other unexpected exceptions
+            return ResponseEntity.ok(new ApiResponse(false, "Failed to process wallet payment: " + e.getMessage()));
+        }
+    }
+
+
+    private ResponseEntity<ApiResponse> handleCashPayment(TransactionDto transactionDto, Transaction transaction, Invoice invoice) {
+        try {
+            // Process the cash payment
+            transaction.setStatus("SUCCESS");
+            transaction.setAmount(transactionDto.getAmount());
             invoice.setStatus(InvoiceStatus.PAID);
             transaction.setInvoice_status("FULL");
-        } else {
-            transaction.setStatus("FAILED");
-            transaction.setInvoice_status("FAILED");
+
+            // Return success response
+            return ResponseEntity.ok(new ApiResponse(true, "Cash payment processed successfully."));
+
+        } catch (Exception e) {
+            logger.error("Cash payment processing failed: {}", e.getMessage());
+            // Handle any unexpected exceptions
+            return ResponseEntity.ok(new ApiResponse(false, "Failed to process cash payment: " + e.getMessage()));
         }
     }
 
-    private void handleWalletPayment(TransactionDto transactionDto, Transaction transaction, Invoice invoice,BigDecimal discountAmount) {
-        WalletDetails walletDetails = walletDetailsRepo.findByCustomer(transaction.getCustomer())
-                .orElseThrow(() -> new InvalidTransactionException("Wallet not found for the customer."));
-
-        BigDecimal walletBalance = walletDetails.getBalance();
-        if (walletBalance.compareTo(transactionDto.getAmount()) < 0) {
-            throw new InvalidTransactionException("Insufficient wallet balance.");
-        }
-
-        walletDetails.debit(transactionDto.getAmount()); // Deduct from wallet
-        walletDetailsRepo.save(walletDetails);
-        transaction.setMethodId(walletDetails.getId());  // Associate the wallet details
-        transaction.setStatus("SUCCESS");
-        transaction.setAmount(discountAmount);
-        invoice.setAmount(invoice.getAmount().subtract(discountAmount));
-        invoice.setStatus(InvoiceStatus.PAID);
-        transaction.setInvoice_status("FULL");
-    }
-
-    private void handleCashPayment(TransactionDto transactionDto, Transaction transaction, Invoice invoice) {
-        transaction.setStatus("SUCCESS");
-        transaction.setAmount(transactionDto.getAmount());
-        invoice.setStatus(InvoiceStatus.PAID);
-        transaction.setInvoice_status("FULL");
-    }
 
     private boolean simulateCardPayment(CardDetails cardDetails, BigDecimal amount) {
-        return true; // Simulate successful payment
+        if(cardDetails.getBalance().compareTo(amount) < 0) {
+            return false; // Insufficient balance
+        }
+        return true;
     }
 
-    private void validateCardDetails(TransactionDto transactionDto) {
-        CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId()).get();
+
+    private ResponseEntity<ApiResponse> validateCardDetails(TransactionDto transactionDto) {
+        CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId())
+                .orElseThrow(() -> new InvalidTransactionException("Card details not found."));
+
         if (cardDetails.getCardNumber() == null || cardDetails.getCardNumber().length() != 16) {
-            throw new InvalidTransactionException("Card number must be 16 digits.");
+            return ResponseEntity.ok(new ApiResponse(false, "Card number must be 16 digits."));
         }
         if (cardDetails.getCvv() == null || cardDetails.getCvv().length() != 3) {
-            throw new InvalidTransactionException("CVV must be 3 digits.");
+            return ResponseEntity.ok(new ApiResponse(false, "CVV must be 3 digits."));
         }
         if (!isExpiryDateValid(cardDetails.getExpiryDate())) {
-            throw new InvalidTransactionException("Card expiry date must be in the future.");
+            return ResponseEntity.ok(new ApiResponse(false, "Card expiry date must be in the future."));
         }
+        return ResponseEntity.ok(new ApiResponse(true, "Card details are valid."));
     }
+
 
     private boolean isExpiryDateValid(String expiryDate) {
         try {

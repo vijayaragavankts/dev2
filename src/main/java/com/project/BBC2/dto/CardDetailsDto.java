@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -15,4 +17,5 @@ public class CardDetailsDto {
         private String cvv;               // Card Verification Value
         private String cardType;
         private String cardId;
+        private BigDecimal balance;
 }

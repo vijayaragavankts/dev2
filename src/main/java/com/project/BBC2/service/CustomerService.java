@@ -54,4 +54,10 @@ public class CustomerService {
             return false; // OTP is invalid
         }
     }
+
+    public Customer getCustomerById(String customerId) {
+        return customerRepo.findByCustomerId(customerId)
+                .orElseThrow(() -> new RuntimeException("Customer not found"));
+    }
+
 }

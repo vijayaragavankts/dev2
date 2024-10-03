@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.web.bind.annotation.CrossOrigin;
 
+import java.math.BigDecimal;
+
 @Entity
 @Data
 @AllArgsConstructor
@@ -21,8 +23,24 @@ public class CardDetails {
     private String expiryDate;
     private String cvv;
     private String cardType; // credit, debit
+    private BigDecimal balance;
+
     @ManyToOne
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
+
+
+
+    public void credit(BigDecimal amount) {
+        this.balance = this.balance.add(amount);  // Use add method for BigDecimal
+    }
+
+    // Method to debit the balance
+    public void debit(BigDecimal amount) throws IllegalArgumentException {
+        if (this.balance.compareTo(amount) < 0) {
+            throw new IllegalArgumentException("Insufficient balance");
+        }
+        this.balance = this.balance.subtract(amount);  // Use subtract method for BigDecimal
+    }
 
 }

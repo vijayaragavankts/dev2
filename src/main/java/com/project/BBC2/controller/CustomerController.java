@@ -1,5 +1,6 @@
 package com.project.BBC2.controller;
 
+import com.project.BBC2.model.Customer;
 import com.project.BBC2.service.CustomerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -29,7 +30,17 @@ public class CustomerController {
         if (isValid) {
             return ResponseEntity.ok("OTP is valid.");
         } else {
-            return ResponseEntity.badRequest().body("Invalid OTP.");
+            return ResponseEntity.ok("Invalid OTP.");
+        }
+    }
+
+    @GetMapping("/{customerId}")
+    public ResponseEntity<Customer> getCustomerById(@PathVariable String customerId) {
+        try {
+            Customer customer = customerService.getCustomerById(customerId);
+            return ResponseEntity.ok(customer);
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
         }
     }
 }
