@@ -48,4 +48,8 @@ public class WalletService {
         walletDetails.debit(amount);  // Deduct the amount from the wallet balance
         walletDetailsRepo.save(walletDetails);  // Save the updated wallet balance
     }
+
+    public WalletDetails getWalletDetails(Long walletId) {
+        return walletDetailsRepo.findById(walletId).orElse(null);
+    }
 }

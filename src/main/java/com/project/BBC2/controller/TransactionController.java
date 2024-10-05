@@ -37,7 +37,6 @@ public class TransactionController {
         List<Transaction> transactions = transactionService.getTransactionsByCustomerId(customerId);
         return new ResponseEntity<>(transactions, HttpStatus.OK);
     }
-
     // get all transactions
     @GetMapping("/all")
     public ResponseEntity<List<Transaction>> getAllTransactions() {

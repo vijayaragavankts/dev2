@@ -1,8 +1,10 @@
 package com.project.BBC2.service;
 
+import com.project.BBC2.controller.ApiResponse;
 import com.project.BBC2.model.Customer;
 import com.project.BBC2.repository.CustomerRepo;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
@@ -19,7 +21,7 @@ public class CustomerService {
 
     private String otp1 = "";
 
-    public String validateCustomerAndSendOtp(String customerId) {
+    public ResponseEntity<?> validateCustomerAndSendOtp(String customerId) {
         // Check if customer exists
         Optional<Customer> customerOpt = customerRepo.findByCustomerId(customerId);
 
@@ -35,9 +37,9 @@ public class CustomerService {
             // Send OTP to email
             emailService.sendOtpEmail(email, otp);
 
-            return "OTP sent to " + email;
+            return ResponseEntity.ok(new ApiResponse(true, "OTP sent to " + email));
         } else {
-            throw new RuntimeException("Invalid Customer ID");
+            return ResponseEntity.ok(new ApiResponse(false, "Invalid Customer ID"));
         }
     }
     private String generateOtp() {
@@ -46,12 +48,12 @@ public class CustomerService {
         return String.valueOf(otp);
     }
 
-    public boolean validateOtp(String enteredOtp) {
+    public ResponseEntity<?> validateOtp(String enteredOtp) {
         // Compare the stored OTP (otp1) with the entered OTP
-        if (Objects.equals(this.otp1, enteredOtp)) {
-            return true; // OTP is valid
+        if (otp1.equals(enteredOtp)) {
+            return ResponseEntity.ok(new ApiResponse(true, "OTP is valid"));
         } else {
-            return false; // OTP is invalid
+            return ResponseEntity.ok(new ApiResponse(false, "Invalid OTP"));
         }
     }
 
@@ -59,5 +61,4 @@ public class CustomerService {
         return customerRepo.findByCustomerId(customerId)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
     }
-
 }

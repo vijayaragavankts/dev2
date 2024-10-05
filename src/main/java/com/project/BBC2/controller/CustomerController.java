@@ -15,24 +15,22 @@ public class CustomerController {
     private CustomerService customerService;
 
     @PostMapping("/validate")
-    public ResponseEntity<String> validateCustomerAndSendOtp(@RequestParam String customerId) {
+    public ResponseEntity<?> validateCustomerAndSendOtp(@RequestParam String customerId) {
         try {
-            String response = customerService.validateCustomerAndSendOtp(customerId);
-            return ResponseEntity.ok(response);
+            return customerService.validateCustomerAndSendOtp(customerId);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
     @PostMapping("/validateOtp")
-    public ResponseEntity<String> validateOtp(@RequestParam String enteredOtp) {
-        boolean isValid = customerService.validateOtp(enteredOtp);
-        if (isValid) {
-            return ResponseEntity.ok("OTP is valid.");
-        } else {
-            return ResponseEntity.ok("Invalid OTP.");
+    public ResponseEntity<?> validateOtp(@RequestParam String enteredOtp) {
+        if (enteredOtp == null || enteredOtp.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ApiResponse(false, "OTP cannot be empty"));
         }
+        return customerService.validateOtp(enteredOtp);
     }
+
 
     @GetMapping("/{customerId}")
     public ResponseEntity<Customer> getCustomerById(@PathVariable String customerId) {

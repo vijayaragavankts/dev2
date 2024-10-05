@@ -124,16 +124,16 @@ public class TransactionService {
         try {
             curr = "partial";
 
-                validateCardDetails(transactionDto);
-                // find cardDetails by its cardId
-                CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId())
-                        .orElse(null);
-
-                if (cardDetails == null) {
-                    return ResponseEntity.ok(new ApiResponse(false, "Card Detail not found."));
-                }
-
-                transaction.setMethodId(cardDetails.getId());
+//                validateCardDetails(transactionDto);
+//                // find cardDetails by its cardId
+//                CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId())
+//                        .orElse(null);
+//
+//                if (cardDetails == null) {
+//                    return ResponseEntity.ok(new ApiResponse(false, "Card Detail not found."));
+//                }
+//
+//                transaction.setMethodId(cardDetails.getId());
                 ResponseEntity<ApiResponse> paymentResponse = processPayment(transactionDto, transaction, invoice, transactionAmount, curr);
                 if (!paymentResponse.getBody().isSuccess()) {
                     return paymentResponse;
@@ -306,44 +306,49 @@ public class TransactionService {
             WalletDetails walletDetails = walletDetailsRepo.findByCustomer(transaction.getCustomer())
                     .orElseThrow(() -> new InvalidTransactionException("Wallet not found for the customer."));
 
+            if (walletDetails == null) {
+                return ResponseEntity.ok(new ApiResponse(false, "Wallet details not found for the customer."));
+            }
+
             BigDecimal walletBalance = walletDetails.getBalance();
 
-            // Check if wallet has sufficient balance
-            if (walletBalance.compareTo(discountAmount) < 0) {
-                return ResponseEntity.ok(new ApiResponse(false, "Insufficient wallet balance."));
+            boolean walletPaymentSuccess = simulateWalletPayment(walletDetails, discountAmount);
+            if (walletPaymentSuccess) {
+                System.out.println("Executed success wallet ==============================================================================================");
+                transaction.setStatus("SUCCESS");
+                invoice.setAmount(invoice.getAmount().subtract(discountAmount));
+                walletDetails.debit(discountAmount);
+                if (curr.equalsIgnoreCase("full")) {
+                    invoice.setStatus(InvoiceStatus.PAID);
+                    transaction.setInvoice_status("FULL");
+                } else {
+                    invoice.setStatus(InvoiceStatus.PARTIALLY);
+                    invoice.setDouble_discount_amount(BigDecimal.valueOf(0));
+                    invoice.setSingle_discount_amount(BigDecimal.valueOf(0));
+                    transaction.setInvoice_status("PARTIAL");
+                }
+                invoiceRepo.save(invoice);
+                transactionRepo.save(transaction);
+
+                return ResponseEntity.ok(new ApiResponse(true, "Wallet payment processed successfully"));
+            } else {
+                System.out.println("Executed error wallet ==============================================================================================");
+
+                transaction.setStatus("FAILED");
+                transaction.setAmount(BigDecimal.valueOf(0));  // Reset transaction amount on failure
+                transaction.setInvoice_status("FAILED");
+                transactionRepo.save(transaction);
+
+                // Return a failed response
+                // For payment-related failures
+                return ResponseEntity.ok(new ApiResponse(false, "Wallet payment declined due to insufficient funds"));
+
             }
-
-            // Debit wallet and save
-            walletDetails.debit(transactionDto.getAmount());
-            walletDetailsRepo.save(walletDetails);
-
-            // Associate wallet details with transaction
-            transaction.setMethodId(walletDetails.getId());
-            transaction.setStatus("SUCCESS");
-            transaction.setAmount(discountAmount);
-
-            // Update invoice status and amount
-            invoice.setAmount(invoice.getAmount().subtract(discountAmount));
-            if(curr.equalsIgnoreCase("full")){
-                invoice.setStatus(InvoiceStatus.PAID);
-                transaction.setInvoice_status("FULL");
-            }
-            else{
-                invoice.setStatus(InvoiceStatus.PARTIALLY);
-                transaction.setInvoice_status("PARTIAL");
-                invoice.setDouble_discount_amount(BigDecimal.valueOf(0));
-                invoice.setSingle_discount_amount(BigDecimal.valueOf(0));
-            }
-            invoiceRepo.save(invoice);
-
-            // Return success response
-            return ResponseEntity.ok(new ApiResponse(true, "Wallet payment processed successfully."));
 
         } catch (InvalidTransactionException e) {
             logger.error("Wallet payment failed: {}", e.getMessage());
             // Handle invalid transaction (e.g., wallet not found or insufficient balance)
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new ApiResponse(false, e.getMessage()));
+            return ResponseEntity.ok(new ApiResponse(false, e.getMessage()));
         } catch (Exception e) {
             logger.error("Wallet payment processing failed: {}", e.getMessage());
             // Handle any other unexpected exceptions
@@ -378,6 +383,9 @@ public class TransactionService {
         return true;
     }
 
+    public boolean simulateWalletPayment(WalletDetails walletDetails, BigDecimal amount){
+        return walletDetails.getBalance().compareTo(amount) >= 0;
+    }
 
     private ResponseEntity<ApiResponse> validateCardDetails(TransactionDto transactionDto) {
         CardDetails cardDetails = cardDetailsRepo.findById(transactionDto.getCardId())
