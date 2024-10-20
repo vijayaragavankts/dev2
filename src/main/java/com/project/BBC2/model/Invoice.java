@@ -41,7 +41,7 @@ public class Invoice {
     private Customer customer;
 
     @Enumerated(EnumType.STRING)
-    private InvoiceStatus status = InvoiceStatus.PENDING; // Default status
+    private InvoiceStatus status = InvoiceStatus.PENDING;
 
 
 }

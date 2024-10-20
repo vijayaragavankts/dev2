@@ -10,11 +10,11 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @NoArgsConstructor
 public class CardDetailsDto {
-        private String customerId;       // ID of the customer to whom the card belongs
-        private String cardNumber;        // Card number
-        private String cardHolderName;    // Name of the cardholder
-        private String expiryDate;    // Expiry date of the card (e.g., MM/YY)
-        private String cvv;               // Card Verification Value
+        private String customerId;
+        private String cardNumber;
+        private String cardHolderName;
+        private String expiryDate;
+        private String cvv;
         private String cardType;
         private String cardId;
         private BigDecimal balance;

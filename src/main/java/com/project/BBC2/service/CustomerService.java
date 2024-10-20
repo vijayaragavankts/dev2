@@ -22,14 +22,14 @@ public class CustomerService {
     private String otp1 = "";
 
     public ResponseEntity<?> validateCustomerAndSendOtp(String customerId) {
-        // Check if customer exists
+
         Optional<Customer> customerOpt = customerRepo.findByCustomerId(customerId);
 
         if (customerOpt.isPresent()) {
-            // Generate 6-digit OTP
+
             String otp = generateOtp();
 
-            // Get customer email
+
             String email = customerOpt.get().getEmail();
             this.otp1 = otp;
             System.out.println("Otp : " + this.otp1);
@@ -44,12 +44,12 @@ public class CustomerService {
     }
     private String generateOtp() {
         Random random = new Random();
-        int otp = 100000 + random.nextInt(900000); // Generates a number between 100000 and 999999
+        int otp = 100000 + random.nextInt(900000);
         return String.valueOf(otp);
     }
 
     public ResponseEntity<?> validateOtp(String enteredOtp) {
-        // Compare the stored OTP (otp1) with the entered OTP
+
         if (otp1.equals(enteredOtp)) {
             return ResponseEntity.ok(new ApiResponse(true, "OTP is valid"));
         } else {

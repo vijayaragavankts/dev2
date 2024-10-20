@@ -15,16 +15,15 @@ public class WalletController {
     @Autowired
     private WalletService walletService;
 
-    // Endpoint to credit the wallet
     @PostMapping("/credit/{customerId}/{amount}")
-    public ResponseEntity<String> creditWallet(@PathVariable String customerId, @PathVariable BigDecimal amount) {
+    public ResponseEntity<?> creditWallet(@PathVariable String customerId, @PathVariable BigDecimal amount) {
         try {
             walletService.creditWallet(customerId, amount);
-            return ResponseEntity.ok("Successfully credited $" + amount + " to wallet of customer ID: " + customerId);
+            return ResponseEntity.ok(new ApiResponse(true,"Successfully credited $" + amount + " to wallet of customer ID: " + customerId));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.ok(new ApiResponse(false,e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("An error occurred while crediting the wallet.");
+            return ResponseEntity.ok(new ApiResponse(false,"An error occurred while crediting the wallet."));
         }
     }
 

@@ -20,25 +20,26 @@ public class Transaction {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long transactionId;  // Unique ID for the transaction
+
+    private long transactionId;
 
     @ManyToOne
     @JoinColumn(name = "customer_id", nullable = false)
-    private Customer customer;    // The customer associated with the transaction
+    private Customer customer;
 
     @ManyToOne
     @JoinColumn(name = "invoice_id", nullable = false)
-    private Invoice invoice;      // The invoice related to the transaction
+    private Invoice invoice;
 
-    private BigDecimal amount;         // The amount of the transaction
-    private String status;         // Status of the transaction (e.g., SUCCESS, FAILED)
+    private BigDecimal amount;
+    private String status;
     private String invoice_status;
 
     @CreationTimestamp
     @Column(updatable = false)
-    private LocalDateTime transactionDate; // Date when the transaction was made
+    private LocalDateTime transactionDate;
 
-    private String paymentMethod; // Payment method (e.g., "CASH", "ONLINE", etc.)
+    private String paymentMethod;
 
     private Boolean isEarly;
 

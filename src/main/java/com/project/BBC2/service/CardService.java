@@ -25,7 +25,7 @@ public class CardService {
         return cardDetailsRepo.findByCustomer_CustomerId(customerId);
     }
 
-    // New method to get card details by cardId
+
     public CardDetails getCardDetailsByCardId(Long cardId) {
         Optional<CardDetails> cardDetails = cardDetailsRepo.findById(cardId);
         return cardDetails.orElse(null); // Or throw an exception if card not found
@@ -39,7 +39,7 @@ public class CardService {
         cardDetails.setCvv(cardDetailsDto.getCvv());
         cardDetails.setCardType(cardDetailsDto.getCardType());
         cardDetails.setBalance(BigDecimal.valueOf(5000));
-        // Fetch the customer and set it
+
         Customer customer = customerRepo.findByCustomerId(cardDetailsDto.getCustomerId())
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
         cardDetails.setCustomer(customer);
@@ -48,14 +48,14 @@ public class CardService {
     }
 
     public CardDetails creditCard(Long cardId, BigDecimal amount) {
-        // Find the card by ID
+
         CardDetails cardDetails = cardDetailsRepo.findById(cardId)
                 .orElseThrow(() -> new IllegalArgumentException("Card not found"));
 
-        // Credit the specified amount to the card
+
         cardDetails.credit(amount);
 
-        // Save the updated card details and return
+
         return cardDetailsRepo.save(cardDetails);
     }
 

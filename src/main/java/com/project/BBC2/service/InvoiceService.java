@@ -20,11 +20,11 @@ public class InvoiceService {
     private CustomerRepo customerRepo;
 
     public List<Invoice> getInvoicesByCustomerId(String customerId) {
-        // First, find the customer by ID
+
         Customer customer = customerRepo.findByCustomerId(customerId)
                 .orElseThrow(() -> new RuntimeException("Customer not found"));
 
-        // Now find invoices by customer
+
         return invoiceRepo.findByCustomer(customer);
     }
 

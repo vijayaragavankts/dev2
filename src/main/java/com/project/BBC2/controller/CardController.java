@@ -49,13 +49,13 @@ public class CardController {
             return ResponseEntity.notFound().build();
         }
 
-        // Update fields
+
         existingCard.setCardNumber(updatedCardDetails.getCardNumber());
         existingCard.setCardHolderName(updatedCardDetails.getCardHolderName());
         existingCard.setExpiryDate(updatedCardDetails.getExpiryDate());
         existingCard.setCvv(updatedCardDetails.getCvv());
         existingCard.setCardType(updatedCardDetails.getCardType());
-        existingCard.setBalance(updatedCardDetails.getBalance()); // Update balance if needed
+        existingCard.setBalance(updatedCardDetails.getBalance());
 
         CardDetails updatedCard = cardService.save(existingCard);
         return ResponseEntity.ok(updatedCard);

@@ -22,7 +22,7 @@ public class CardDetails {
     private String cardHolderName;
     private String expiryDate;
     private String cvv;
-    private String cardType; // credit, debit
+    private String cardType;
     private BigDecimal balance;
 
     @ManyToOne
@@ -32,15 +32,14 @@ public class CardDetails {
 
 
     public void credit(BigDecimal amount) {
-        this.balance = this.balance.add(amount);  // Use add method for BigDecimal
+        this.balance = this.balance.add(amount);
     }
 
-    // Method to debit the balance
     public void debit(BigDecimal amount) throws IllegalArgumentException {
         if (this.balance.compareTo(amount) < 0) {
             throw new IllegalArgumentException("Insufficient balance");
         }
-        this.balance = this.balance.subtract(amount);  // Use subtract method for BigDecimal
+        this.balance = this.balance.subtract(amount);
     }
 
 }

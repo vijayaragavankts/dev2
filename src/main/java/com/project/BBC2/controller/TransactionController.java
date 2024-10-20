@@ -21,7 +21,6 @@ public class TransactionController {
     @PostMapping
     public ResponseEntity<?> createTransaction(@RequestBody TransactionDto transactionDto) {
         return transactionService.createTransaction(transactionDto);
-//        return new ResponseEntity<>(transaction, HttpStatus.CREATED);
     }
 
     @GetMapping("/{id}")
@@ -31,13 +30,12 @@ public class TransactionController {
                 new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
 
-    // New endpoint to get transactions by customer ID
     @GetMapping("/customer/{customerId}")
     public ResponseEntity<List<Transaction>> getTransactionsByCustomerId(@PathVariable String customerId) {
         List<Transaction> transactions = transactionService.getTransactionsByCustomerId(customerId);
         return new ResponseEntity<>(transactions, HttpStatus.OK);
     }
-    // get all transactions
+
     @GetMapping("/all")
     public ResponseEntity<List<Transaction>> getAllTransactions() {
         List<Transaction> transactions = transactionService.getAllTransactions();

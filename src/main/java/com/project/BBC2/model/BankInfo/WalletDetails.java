@@ -19,22 +19,22 @@ public class WalletDetails {
     private Long id;
 
     @Column(nullable = false)
-    private BigDecimal balance = BigDecimal.valueOf(0.0);  // Initialize properly
+    private BigDecimal balance = BigDecimal.valueOf(0.0);
 
     @OneToOne
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
-    // Method to credit the balance
+
     public void credit(BigDecimal amount) {
-        this.balance = this.balance.add(amount);  // Use add method for BigDecimal
+        this.balance = this.balance.add(amount);
     }
 
-    // Method to debit the balance
+
     public void debit(BigDecimal amount) throws IllegalArgumentException {
         if (this.balance.compareTo(amount) < 0) {
             throw new IllegalArgumentException("Insufficient balance");
         }
-        this.balance = this.balance.subtract(amount);  // Use subtract method for BigDecimal
+        this.balance = this.balance.subtract(amount);
     }
 }
